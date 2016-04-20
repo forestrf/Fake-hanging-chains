@@ -102,7 +102,7 @@ public class FalseChainCreator : MonoBehaviour {
 		Vector3 lastP = p;
 		for (int i = 0; i < quality; i++) {
 			float i01 = (float) i / (quality - 1);
-			Vector3 newP = p + qr.At(i01);
+			Vector3 newP = p + (Vector3) qr.At(i01);
 			Gizmos.DrawLine(lastP, newP);
 			lastP = newP;
 		}
@@ -155,7 +155,7 @@ public class FalseChainCreator : MonoBehaviour {
 		}
 
 		int link = 0;
-		Vector2 v = qr.Deform(lPosByX(0));
+		Vector2 v = qr.At(0);
 		linkPositions[link++] = v;
 		
 		ropeLength = GetRopeUnitLength();
@@ -168,7 +168,7 @@ public class FalseChainCreator : MonoBehaviour {
 		// Positionate last = target (approx)
 		while (link < linkPositions.Length - 1) {
 			float xNew = x + xOffset;
-			Vector2 vNew = qr.Deform(lPosByX(xNew));
+			Vector2 vNew = qr.At(xNew);
 			float distanciaSegmento = Vector2.Distance(vNew, v);
 			if (distanciaRecorrida + distanciaSegmento < linkDistance) {
 				x = xNew;
@@ -186,11 +186,6 @@ public class FalseChainCreator : MonoBehaviour {
 		}
 
 		linkPositions[link] = qr.v[3];
-	}
-
-	Vector2 lPosByX(float targetX) {
-		float y = targetX * 2 - 1;
-		return new Vector2(targetX, y * y - 1);
 	}
 	
 
@@ -251,10 +246,6 @@ public class FalseChainCreator : MonoBehaviour {
 			v[2] = targetOffset - new Vector2(0, distanceYAxis);
 		}
 
-		public Vector2 Deform(Vector2 localPoint) {
-			return new Vector2(localPoint.x * v[3].x, localPoint.y * -v[1].y + v[3].y * localPoint.x);
-		}
-
 		// http://math.stackexchange.com/questions/389174/how-do-you-find-the-distance-between-two-points-on-a-parabola
 		public float GetCurveRectified() {
 			/*
@@ -281,22 +272,29 @@ public class FalseChainCreator : MonoBehaviour {
 			float g = v[3].x;
 			float h = v[1].y;
 			float j = v[3].y;
-
-			float x2 = x * x;
+			
 			float g2 = g * g;
-			float g3 = g2 * g;
 			float g4 = g2 * g2;
 			float h2 = h * h;
-			float h4 = h2 * h2;
-			float j2 = j * j;
-			float j4 = j2 * j2;
 
-			return g2 * Mathf.Log(Mathf.Sqrt(64 * h2 * x2 - 16 * g * h * x * (4 * h + j) + g4 + g2 * (4 * h + j) * (4 * h + j)) + 8 * h * x - g * (4 * h + j)) / (16 * h) + (8 * h * x - g * (4 * h + j)) * Mathf.Sqrt(64 * h2 * x2 - 16 * g * h * x * (4 * h + j) + g4 + g2 * (4 * h + j) * (4 * h + j)) / (16 * g2 * h);
+			float jAdd4h = (4 * h + j);
+			float jAdd4h2 = jAdd4h * jAdd4h;
+			float sqrt1 = Mathf.Sqrt(64 * h2 * x * x - 16 * g * h * x * jAdd4h + g4 + g2 * jAdd4h2);
+			float hx8_gjAdd4h = 8 * h * x - g * jAdd4h;
+			float h16 = 16 * h;
+
+			return g2 * Mathf.Log(sqrt1 + hx8_gjAdd4h) / h16 + hx8_gjAdd4h * sqrt1 / (h16 * g2);
 		}
 
-		internal Vector3 At(float i01) {
-			i01 *= v[3].x;
-			return new Vector3(i01, (i01 / v[3].x * 2 - 1) * (i01 / v[3].x * 2 - 1) * -v[1].y + v[3].y * i01 / v[3].x + v[1].y, 0);
+		internal Vector2 At(float i01) {
+			float g = v[3].x;
+			float h = v[1].y;
+			float j = v[3].y;
+
+			float x = i01 * g;
+
+			float xg21 = x / g * 2 - 1;
+			return new Vector2(x, xg21 * xg21 * -h + j * x / g + h);
 		}
 	}
 
