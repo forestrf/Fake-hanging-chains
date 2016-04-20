@@ -1,4 +1,5 @@
 ﻿#if UNITY_EDITOR
+using System;
 using System.Collections;
 #endif
 using UnityEngine;
@@ -10,12 +11,12 @@ public class FalseChainCreator : MonoBehaviour {
 	public Transform end;
 
 	[Header("Link")]
-	public Transform linkPrefab; // Crear tantos links como linkJoints
+	public Transform linkPrefab; // Create as many links as linkJoints
 	public Vector3 linkForward = new Vector3(0, -1, 0);
 	public Vector3 linkRotationAxis = new Vector3(0, 1, 0);
 
 	[Header("Number of links")]
-	public int numberOfLinks = 15; // Incluidos bordes
+	public int numberOfLinks = 15;
 	public float linkSize = 1;
 
 	[Header("Other settings")]
@@ -31,11 +32,10 @@ public class FalseChainCreator : MonoBehaviour {
 	Transform[] linksTransforms;
 	Vector2[] linkPositions; // update every frame looking at QuadRope and the Y function
 	QuadRope qr = new QuadRope();
-	int linkJoints; // Incluidos bordes
+	int linkJoints; // Border links included
 	float scale;
 	Quaternion linkRotationAxisRotation;
 	float ropeLength;
-	bool perfectRopeLength = true; // optimizacion en curso. Falso da malos resultados
 	Vector2 lastTarget;
 	Vector3 lastTrgRot;
 
@@ -102,7 +102,7 @@ public class FalseChainCreator : MonoBehaviour {
 		Vector3 lastP = p;
 		for (int i = 0; i < quality; i++) {
 			float i01 = (float) i / (quality - 1);
-			Vector3 newP = p + (Vector3) qr.Deform(lPosByX(i01));
+			Vector3 newP = p + qr.At(i01);
 			Gizmos.DrawLine(lastP, newP);
 			lastP = newP;
 		}
@@ -118,16 +118,7 @@ public class FalseChainCreator : MonoBehaviour {
 	}
 
 	float GetRopeUnitLength() {
-		Vector2 v = qr.Deform(lPosByX(0));
-		float distancia = 0;
-		for (int i = 1; i < quality; i++) {
-			float x = (float) i / (quality - 1); // [0..1]
-			Vector2 vNew = qr.Deform(lPosByX(x));
-			distancia += Vector2.Distance(v, vNew);
-			v = vNew;
-		}
-
-		return distancia;
+		return qr.GetCurveRectified();
 	}
 
 	void SetLinkPositions() {
@@ -166,19 +157,15 @@ public class FalseChainCreator : MonoBehaviour {
 		int link = 0;
 		Vector2 v = qr.Deform(lPosByX(0));
 		linkPositions[link++] = v;
-
-		if (perfectRopeLength)
-			ropeLength = GetRopeUnitLength();
-		else {
-			ropeLength = 0.8f; // ir generando sobre la marcha una base de datos?
-		}
+		
+		ropeLength = GetRopeUnitLength();
 
 		float xOffset = 1f / (quality - 1);
 		float linkDistance = 1f / numberOfLinks * ropeLength; // ropeLength [0..1]
 		float distanciaRecorrida = 0;
 		float x = 0;
 
-		// Colocar ultimo = target (si no fuera así, queda muy cerca pero no exacto)
+		// Positionate last = target (approx)
 		while (link < linkPositions.Length - 1) {
 			float xNew = x + xOffset;
 			Vector2 vNew = qr.Deform(lPosByX(xNew));
@@ -209,7 +196,7 @@ public class FalseChainCreator : MonoBehaviour {
 
 	
 	/////////////////////////
-	// CLASES
+	// CLASS
 	/////////////////////////
 
 	class QuadRope {
@@ -221,10 +208,10 @@ public class FalseChainCreator : MonoBehaviour {
 		AnimationCurve curveY = new AnimationCurve(new Keyframe[2] { new Keyframe(0, 0, 1.57f, 1.57f), new Keyframe(1, 0.5f, 0, 0) });
 
 		/*
-		Proyectar funcion cuadrática en el plano deformado. Inicio y final de la cadena en target y base
+		 * Project cuadratic funcion on a deformed quad. Start and end of the chain on target and base
 
-		perimetro = 2
-		(n) = indice en array
+		perimeter = 2
+		(n) = Array index
 
 		(3) + target
 			|\_
@@ -248,7 +235,7 @@ public class FalseChainCreator : MonoBehaviour {
 			float distanceTargetBase = targetOffset.magnitude;
 
 			if (distanceTargetBase > 1f) {
-				// Imposible hacer el cuad bien, la cadena se estirará
+				// The chain will be stretched
 				distanceTargetBase = 1;
 			}
 
@@ -266,6 +253,50 @@ public class FalseChainCreator : MonoBehaviour {
 
 		public Vector2 Deform(Vector2 localPoint) {
 			return new Vector2(localPoint.x * v[3].x, localPoint.y * -v[1].y + v[3].y * localPoint.x);
+		}
+
+		// http://math.stackexchange.com/questions/389174/how-do-you-find-the-distance-between-two-points-on-a-parabola
+		public float GetCurveRectified() {
+			/*
+			function:
+			float g = v[3].x;
+			float h = v[1].y;
+			float j = v[3].y;
+			x = x * 2 - 1
+			f(x) := ((x / g * 2 - 1) ^ 2) * -h + j * x / g + h
+			∫(√(1 + f'(x)^2),x)
+
+			js to do the derive-to-c# faster
+			String.prototype.replaceAll = function(search, replacement) {
+				var target = this;
+				return target.split(search).join(replacement);
+			}
+			a.replaceAll("^","").replaceAll("LN", "Mathf.Log").replaceAll("·", "*").replaceAll("√", "Mathf.Sqrt").replaceAll("ABS", "Mathf.Abs");
+			*/
+
+			return Integrate(1 * v[3].x) - Integrate(0);
+		}
+
+		float Integrate(float x) {
+			float g = v[3].x;
+			float h = v[1].y;
+			float j = v[3].y;
+
+			float x2 = x * x;
+			float g2 = g * g;
+			float g3 = g2 * g;
+			float g4 = g2 * g2;
+			float h2 = h * h;
+			float h4 = h2 * h2;
+			float j2 = j * j;
+			float j4 = j2 * j2;
+
+			return g2 * Mathf.Log(Mathf.Sqrt(64 * h2 * x2 - 16 * g * h * x * (4 * h + j) + g4 + g2 * (4 * h + j) * (4 * h + j)) + 8 * h * x - g * (4 * h + j)) / (16 * h) + (8 * h * x - g * (4 * h + j)) * Mathf.Sqrt(64 * h2 * x2 - 16 * g * h * x * (4 * h + j) + g4 + g2 * (4 * h + j) * (4 * h + j)) / (16 * g2 * h);
+		}
+
+		internal Vector3 At(float i01) {
+			i01 *= v[3].x;
+			return new Vector3(i01, (i01 / v[3].x * 2 - 1) * (i01 / v[3].x * 2 - 1) * -v[1].y + v[3].y * i01 / v[3].x + v[1].y, 0);
 		}
 	}
 
