@@ -46,7 +46,7 @@ public class FalseChainCreator : MonoBehaviour {
 		ropeLength = 1;
 	}
 	
-	void Update() {
+	void LateUpdate() {
 		linkJoints = numberOfLinks + 1;
 		if (linkJoints < 2) return;
 		if (linkSize <= 0) linkSize = 0.001f;
@@ -277,13 +277,12 @@ public class FalseChainCreator : MonoBehaviour {
 			float g4 = g2 * g2;
 			float h2 = h * h;
 
-			float jAdd4h = (4 * h + j);
-			float jAdd4h2 = jAdd4h * jAdd4h;
-			float sqrt1 = Mathf.Sqrt(64 * h2 * x * x - 16 * g * h * x * jAdd4h + g4 + g2 * jAdd4h2);
+			float jAdd4h = 4 * h + j;
+			float sqrt1 = Mathf.Sqrt(64 * h2 * x * x - 16 * g * h * x * jAdd4h + g4 + g2 * jAdd4h * jAdd4h);
 			float hx8_gjAdd4h = 8 * h * x - g * jAdd4h;
 			float h16 = 16 * h;
 
-			return g2 * Mathf.Log(sqrt1 + hx8_gjAdd4h) / h16 + hx8_gjAdd4h * sqrt1 / (h16 * g2);
+			return (Mathf.Log(sqrt1 + hx8_gjAdd4h) * g2 + sqrt1 * hx8_gjAdd4h / g2) / h16;
 		}
 
 		internal Vector2 At(float i01) {
