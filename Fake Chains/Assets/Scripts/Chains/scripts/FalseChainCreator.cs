@@ -26,6 +26,8 @@ public class FalseChainCreator : MonoBehaviour {
 	public bool updateWhenOffscreen = false;
 
 
+	public AnimationCurve testCX, testCY;
+
 
 	static GeometryUtilityUser guu = new GeometryUtilityUser();
 
@@ -44,9 +46,14 @@ public class FalseChainCreator : MonoBehaviour {
 	void Start() {
 		linkRotationAxisRotation = Quaternion.AngleAxis(90, linkRotationAxis);
 		ropeLength = 1;
+		//testCX = QuadRope.curveX;
+		//testCY = QuadRope.curveY;
 	}
 	
 	void LateUpdate() {
+		//QuadRope.curveX = testCX;
+		//QuadRope.curveY = testCY;
+
 		linkJoints = numberOfLinks + 1;
 		if (linkJoints < 2) return;
 		if (linkSize <= 0) linkSize = 0.001f;
@@ -83,10 +90,25 @@ public class FalseChainCreator : MonoBehaviour {
 		}
 	}
 
+	string AnimationCurveToString(AnimationCurve a) {
+		string s = "";
+		for (int i = 0; i < a.length; i++) {
+			s += "new Keyframe(" + a[i].time +
+				"f, " + a[i].value +
+				"f, " + a[i].inTangent +
+				"f, " + a[i].outTangent +
+				"f), ";
+		}
+		return s;
+	}
+
 	void OnDrawGizmosSelected() {
 		if (linkJoints < 2) return;
 		if (null == start || null == end) return;
 		if (null == linkPrefab) return;
+
+		//Debug.Log("x: " + AnimationCurveToString(testCX));
+		//Debug.Log("y: " + AnimationCurveToString(testCY));
 
 		Vector3 p = transform.position;
 
@@ -115,7 +137,24 @@ public class FalseChainCreator : MonoBehaviour {
 
 		// Update in editor to previsualize the setting
 		linkRotationAxisRotation = Quaternion.AngleAxis(90, linkRotationAxis);
+
+		/*
+		float step = 0.1f;
+		for (float y = 1; y >= -1; y -= step) {
+			for (float x = 0; x <= 1; x += step) {
+				if (x > Mathf.Cos(y)) continue;
+				Vector2 v = new Vector2(x, y);
+				qr.SetTarget(v);
+				float l = GetRopeUnitLength();
+				float l2 = Mathf.Pow(l, xx);
+				l2 = 1 - Mathf.Abs(1 - l2);
+				Gizmos.color = new Color(l2, l2, l2, 1);
+				Gizmos.DrawWireSphere(p + (Vector3) v, step * 0.5f);
+			}
+		}
+		*/
 	}
+	//public float xx;
 
 	float GetRopeUnitLength() {
 		return qr.GetCurveRectified();
@@ -199,8 +238,10 @@ public class FalseChainCreator : MonoBehaviour {
 
 		public Vector2[] v = new Vector2[4];
 
-		AnimationCurve curveX = new AnimationCurve(new Keyframe[2] { new Keyframe(1, 0, -1.96f, -1.96f), new Keyframe(0, 1, -0.13f, -0.13f) });
-		AnimationCurve curveY = new AnimationCurve(new Keyframe[2] { new Keyframe(0, 0, 1.57f, 1.57f), new Keyframe(1, 0.5f, 0, 0) });
+		public static AnimationCurve curveX = new AnimationCurve(
+			new Keyframe[] { new Keyframe(0f, 1f, -0.13f, -0.13f), new Keyframe(0.7082354f, 0.8226197f, -3.353576f, -3.353576f), new Keyframe(1f, 0f, -1.96f, -1.96f) });
+		public static AnimationCurve curveY = new AnimationCurve(
+			new Keyframe[] { new Keyframe(0f, 0f, 1.57f, 1.57f), new Keyframe(0.2524837f, 0.4345678f, 0.4180385f, 0.4180385f), new Keyframe(1f, 0.5f, 0f, 0f) });
 
 		/*
 		 * Project cuadratic funcion on a deformed quad. Start and end of the chain on target and base
