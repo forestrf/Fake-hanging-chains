@@ -26,7 +26,7 @@ public class FalseChainCreator : MonoBehaviour {
 	public bool updateWhenOffscreen = false;
 
 
-	public AnimationCurve testCX, testCY;
+	//public AnimationCurve testCX, testCY;
 
 
 	static GeometryUtilityUser guu = new GeometryUtilityUser();
