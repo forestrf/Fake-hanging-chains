@@ -265,7 +265,8 @@ public class FalseChainCreator : MonoBehaviour {
 			a.replaceAll("^","").replaceAll("LN", "Mathf.Log").replaceAll("·", "*").replaceAll("√", "Mathf.Sqrt").replaceAll("ABS", "Mathf.Abs");
 			*/
 
-			return Integrate(1 * v[3].x) - Integrate(0);
+			//Integrate(1) - Integrate(0);
+			return Integrate(v[3].x) - Integrate(0);
 		}
 
 		float Integrate(float x) {
@@ -274,12 +275,11 @@ public class FalseChainCreator : MonoBehaviour {
 			float j = v[3].y;
 			
 			float g2 = g * g;
-			float g4 = g2 * g2;
-			float h2 = h * h;
+			float hx = h * x;
 
 			float jAdd4h = 4 * h + j;
-			float sqrt1 = Mathf.Sqrt(64 * h2 * x * x - 16 * g * h * x * jAdd4h + g4 + g2 * jAdd4h * jAdd4h);
-			float hx8_gjAdd4h = 8 * h * x - g * jAdd4h;
+			float sqrt1 = Mathf.Sqrt(64 * h * hx * x - 16 * g * hx * jAdd4h + g2 * g2 + g2 * jAdd4h * jAdd4h);
+			float hx8_gjAdd4h = hx * 8 - g * jAdd4h;
 			float h16 = 16 * h;
 
 			return (Mathf.Log(sqrt1 + hx8_gjAdd4h) * g2 + sqrt1 * hx8_gjAdd4h / g2) / h16;
