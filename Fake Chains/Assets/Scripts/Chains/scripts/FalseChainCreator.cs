@@ -24,9 +24,11 @@ public class FalseChainCreator : MonoBehaviour {
 	public int quality = 30; // Number of samples to capture the curve deformation. More = slower
 	[Tooltip("Always update the position and rotation of the chain links")]
 	public bool updateWhenOffscreen = false;
+	[Tooltip("Resolution of a Look Up Texture (LUT) needed to positionate correctly the links of the chains. The texture is shader to all the chains, that means that if a chain has a LUT with bigger resolution, lower resolutions will be ignored")]
+	public int tluResolution = 128;
 
-
-	//public AnimationCurve testCX, testCY;
+	[Tooltip("Preview of the LTU")]
+	Texture2D previewTextureLookUp;
 
 
 	static GeometryUtilityUser guu = new GeometryUtilityUser();
@@ -35,25 +37,21 @@ public class FalseChainCreator : MonoBehaviour {
 	Vector2[] linkPositions; // update every frame looking at QuadRope and the Y function
 	QuadRope qr = new QuadRope();
 	int linkJoints; // Border links included
+	int tluPrecision = 16;
 	float scale;
-	Quaternion linkRotationAxisRotation;
 	float ropeLength;
 	Vector2 lastTarget;
 	Vector3 lastTrgRot;
+	Quaternion linkRotationAxisRotation;
 
 
 
 	void Start() {
 		linkRotationAxisRotation = Quaternion.AngleAxis(90, linkRotationAxis);
 		ropeLength = 1;
-		//testCX = QuadRope.curveX;
-		//testCY = QuadRope.curveY;
 	}
-	
-	void LateUpdate() {
-		//QuadRope.curveX = testCX;
-		//QuadRope.curveY = testCY;
 
+	void LateUpdate() {
 		linkJoints = numberOfLinks + 1;
 		if (linkJoints < 2) return;
 		if (linkSize <= 0) linkSize = 0.001f;
@@ -77,8 +75,9 @@ public class FalseChainCreator : MonoBehaviour {
 			if (!updateWhenOffscreen && !guu.IsVisibleByCamera(new Bounds(sPos + fromTo * 0.5f, lScale * scale))) return;
 
 			lastTarget = target;
-			qr.SetTarget(target);
-			
+			qr.SetTarget(target, tluResolution, tluPrecision);
+			previewTextureLookUp = QuadRope.setTargetLookUpTexture;
+
 			SetLocalLinkPositions();
 			
 			SetLinkPositions();
@@ -106,18 +105,12 @@ public class FalseChainCreator : MonoBehaviour {
 		if (linkJoints < 2) return;
 		if (null == start || null == end) return;
 		if (null == linkPrefab) return;
-
-		//Debug.Log("x: " + AnimationCurveToString(testCX));
-		//Debug.Log("y: " + AnimationCurveToString(testCY));
-
+		
 		Vector3 p = transform.position;
 
 		// Draw box
 		Gizmos.color = Color.white;
-		Gizmos.DrawLine(p + (Vector3) qr.v[0], p + (Vector3) qr.v[1]);
-		Gizmos.DrawLine(p + (Vector3) qr.v[1], p + (Vector3) qr.v[2]);
-		Gizmos.DrawLine(p + (Vector3) qr.v[2], p + (Vector3) qr.v[3]);
-		Gizmos.DrawLine(p + (Vector3) qr.v[3], p + (Vector3) qr.v[0]);
+		qr.GizmoDrawRect(p);
 
 		// Draw rope curve
 		Gizmos.color = Color.red;
@@ -137,24 +130,7 @@ public class FalseChainCreator : MonoBehaviour {
 
 		// Update in editor to previsualize the setting
 		linkRotationAxisRotation = Quaternion.AngleAxis(90, linkRotationAxis);
-
-		/*
-		float step = 0.1f;
-		for (float y = 1; y >= -1; y -= step) {
-			for (float x = 0; x <= 1; x += step) {
-				if (x > Mathf.Cos(y)) continue;
-				Vector2 v = new Vector2(x, y);
-				qr.SetTarget(v);
-				float l = GetRopeUnitLength();
-				float l2 = Mathf.Pow(l, xx);
-				l2 = 1 - Mathf.Abs(1 - l2);
-				Gizmos.color = new Color(l2, l2, l2, 1);
-				Gizmos.DrawWireSphere(p + (Vector3) v, step * 0.5f);
-			}
-		}
-		*/
 	}
-	//public float xx;
 
 	float GetRopeUnitLength() {
 		return qr.GetCurveRectified();
@@ -224,7 +200,7 @@ public class FalseChainCreator : MonoBehaviour {
 			}
 		}
 
-		linkPositions[link] = qr.v[3];
+		linkPositions[link] = qr.GetTarget();
 	}
 	
 
@@ -234,66 +210,94 @@ public class FalseChainCreator : MonoBehaviour {
 	/////////////////////////
 
 	class QuadRope {
-		public float width, height;
+		Vector2 target;
+		float distanceYAxis;
 
-		public Vector2[] v = new Vector2[4];
+		// stores the desired distanceYAxis of SetTarget. upper right half of the full target unit range
+		public static Texture2D setTargetLookUpTexture;
 
-		public static AnimationCurve curveX = new AnimationCurve(
-			new Keyframe[] { new Keyframe(0f, 1f, -0.13f, -0.13f), new Keyframe(0.7082354f, 0.8226197f, -3.353576f, -3.353576f), new Keyframe(1f, 0f, -1.96f, -1.96f) });
-		public static AnimationCurve curveY = new AnimationCurve(
-			new Keyframe[] { new Keyframe(0f, 0f, 1.57f, 1.57f), new Keyframe(0.2524837f, 0.4345678f, 0.4180385f, 0.4180385f), new Keyframe(1f, 0.5f, 0f, 0f) });
+		void CalculateTexture(int side, int precision) {
+			setTargetLookUpTexture = new Texture2D(side, side, TextureFormat.Alpha8, false, true);
+			setTargetLookUpTexture.filterMode = FilterMode.Bilinear;
+			setTargetLookUpTexture.wrapMode = TextureWrapMode.Clamp;
+			float invSide = 1f / side;
+			// duplicate the second row to the first row because when target.x == 0 the rectified curve gives NaN (division by 0)
+			for (int y = 0; y < side; y++) {
+				float distanceYAxis = CalculateDistanceYAxis(new Vector2(invSide, y * invSide), precision);
+				setTargetLookUpTexture.SetPixel(0, y, new Color(distanceYAxis, distanceYAxis, distanceYAxis, distanceYAxis));
+			}
+			for (int x = 1; x < side; x++) {
+				float x2 = x * invSide;
+				for (int y = 0; y < side; y++) {
+					float distanceYAxis = CalculateDistanceYAxis(new Vector2(x2, y * invSide), precision);
+					setTargetLookUpTexture.SetPixel(x, y, new Color(distanceYAxis, distanceYAxis, distanceYAxis, distanceYAxis));
+				}
+			}
+			setTargetLookUpTexture.Apply();
+		}
+
+		float CalculateDistanceYAxis(Vector2 target, int precision) {
+			float y = 0.5f;
+			float step = y * 0.5f;
+			for (int i = 0; i < precision; i++) {
+				float l = GetCurveRectified(target, y);
+				if (Mathf.Approximately(l, 1)) return y;
+				else if (l > 1) y -= step;
+				else y += step;
+				step *= 0.5f;
+			}
+			return y;
+		}
 
 		/*
 		 * Project cuadratic funcion on a deformed quad. Start and end of the chain on target and base
 
 		perimeter = 2
-		(n) = Array index
 
-		(3) + target
+		    + target
 			|\_
 			|  \_0.5
 		 0.5|    \_
-			|      \_+ base (0)
-		(2) |        |
-			 \_      |
+			|      \_+ base
+		    |   x^2  |
+			 \_inside|
 			   \_    |0.5
 			 0.5 \_  |
-				   \_| (1)
+				   \_|
 		*/
 
 		// 5 indices
-		public void SetTarget(Vector2 targetOffset) {
-			if (v.Length != 4) {
-				Debug.LogError("quadPoints tiene que tener length = 4");
-				return;
+		public void SetTarget(Vector2 targetOffset, int resolutionLookUp, int precision) {
+			if (setTargetLookUpTexture == null || setTargetLookUpTexture.width < resolutionLookUp) {
+				CalculateTexture(resolutionLookUp, precision);
 			}
 
-			float distanceTargetBase = targetOffset.magnitude;
-
-			if (distanceTargetBase > 1f) {
+			target = targetOffset;
+			if (target.magnitude > 1f) {
 				// The chain will be stretched
-				distanceTargetBase = 1;
+				target = target.normalized;
 			}
+			distanceYAxis = CalculateDistanceYAxis(target);
+		}
 
-			// Lerp (4, 2, Mathf.Sqrt(distanceTargetBase)) // Not good enough results
-			float div = 2 + 2 * curveX.Evaluate(distanceTargetBase); // Manually tweaked to make the chain length approx 1
-			float distanceYAxis = (2 - distanceTargetBase * 2) / div;
-			distanceYAxis = curveY.Evaluate(distanceYAxis);
-
-			v[0] = Vector2.zero;
-			v[1] = Vector2.zero - new Vector2(0, distanceYAxis);
-
-			v[3] = targetOffset;
-			v[2] = targetOffset - new Vector2(0, distanceYAxis);
+		public float CalculateDistanceYAxis(Vector2 target) {
+			// lookup using targetOffset (x, y)
+			return setTargetLookUpTexture.GetPixelBilinear(target.x, Mathf.Abs(target.y)).a;
 		}
 
 		// http://math.stackexchange.com/questions/389174/how-do-you-find-the-distance-between-two-points-on-a-parabola
+		/// <summary>
+		/// Get the length of the hanging rope. It should be approx 1
+		/// </summary>
 		public float GetCurveRectified() {
+			return GetCurveRectified(target, distanceYAxis);
+		}
+		public float GetCurveRectified(Vector2 target, float distanceYAxis) {
 			/*
 			function:
-			float g = v[3].x;
-			float h = v[1].y;
-			float j = v[3].y;
+			float g = target.x;
+			float h = -distanceYAxis;
+			float j = target.y;
 			x = x * 2 - 1
 			f(x) := ((x / g * 2 - 1) ^ 2) * -h + j * x / g + h
 			∫(√(1 + f'(x)^2),x)
@@ -307,14 +311,14 @@ public class FalseChainCreator : MonoBehaviour {
 			*/
 
 			//Integrate(1) - Integrate(0);
-			return Integrate(v[3].x) - Integrate(0);
+			return Integrate(target.x, target, distanceYAxis) - Integrate(0, target, distanceYAxis);
 		}
 
-		float Integrate(float x) {
-			float g = v[3].x;
-			float h = v[1].y;
-			float j = v[3].y;
-			
+		float Integrate(float x, Vector2 target, float distanceYAxis) {
+			float g = target.x;
+			float h = -distanceYAxis;
+			float j = target.y;
+
 			float g2 = g * g;
 			float hx = h * x;
 
@@ -326,15 +330,29 @@ public class FalseChainCreator : MonoBehaviour {
 			return (Mathf.Log(sqrt1 + hx8_gjAdd4h) * g2 + sqrt1 * hx8_gjAdd4h / g2) / h16;
 		}
 
-		internal Vector2 At(float i01) {
-			float g = v[3].x;
-			float h = v[1].y;
-			float j = v[3].y;
+		public Vector2 At(float i01) {
+			return At(i01, target, distanceYAxis);
+		}
+		public Vector2 At(float i01, Vector2 target, float distanceYAxis) {
+			float g = target.x;
+			float h = -distanceYAxis;
+			float j = target.y;
 
 			float x = i01 * g;
 
 			float xg21 = x / g * 2 - 1;
 			return new Vector2(x, xg21 * xg21 * -h + j * x / g + h);
+		}
+
+		public void GizmoDrawRect(Vector3 p) {
+			Gizmos.DrawLine(p, p + new Vector3(0, -distanceYAxis, 0));
+			Gizmos.DrawLine(p + new Vector3(0, -distanceYAxis, 0), p + new Vector3(target.x, target.y - distanceYAxis, 0));
+			Gizmos.DrawLine(p + new Vector3(target.x, target.y - distanceYAxis, 0), p + (Vector3) target);
+			Gizmos.DrawLine(p + (Vector3) target, p);
+		}
+
+		public Vector2 GetTarget() {
+			return target;
 		}
 	}
 
