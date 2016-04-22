@@ -13,7 +13,16 @@ public class FalseChainCreator : MonoBehaviour {
 	[Header("Link")]
 	public Transform linkPrefab; // Create as many links as linkJoints
 	public Vector3 linkForward = new Vector3(0, -1, 0);
+	[Tooltip("If you want to make a rope instead of a chain, set this to false")]
+	public bool rotateEvenLinks = true;
 	public Vector3 linkRotationAxis = new Vector3(0, 1, 0);
+
+	[Header("Rope")]
+	[Tooltip("If true, Link parameters will be ignored")]
+	public bool isRope = false;
+	public int sides = 3;
+	public float ropeRadius = 2;
+	public Material material;
 
 	[Header("Number of links")]
 	public int numberOfLinks = 15;
@@ -79,8 +88,12 @@ public class FalseChainCreator : MonoBehaviour {
 			previewTextureLookUp = QuadRope.setTargetLookUpTexture;
 
 			SetLocalLinkPositions();
-			
-			SetLinkPositions();
+
+			if (isRope) {
+				SetRopePositions();
+			} else {
+				SetLinkPositions();
+			}
 		}
 		Vector3 trgRot = new Vector3(xz.x, 0, xz.y);
 		if (trgRot != lastTrgRot) {
@@ -136,14 +149,63 @@ public class FalseChainCreator : MonoBehaviour {
 		return qr.GetCurveRectified();
 	}
 
+	public Mesh ropeMesh;
+	void SetRopePositions() {
+		if (linksTransforms == null || linksTransforms.Length != numberOfLinks) {
+			while (transform.childCount > 0)
+				DestroyImmediate(transform.GetChild(0).gameObject);
+			linksTransforms = new Transform[numberOfLinks + 2];
+			for (int i = 1; i < numberOfLinks + 1; i++) {
+				linksTransforms[i] = new GameObject("positionForSkinnedRope").transform;
+				linksTransforms[i].parent = transform;
+				linksTransforms[i].localScale = Vector3.one;
+			}
+			linksTransforms[0] = start;
+			linksTransforms[numberOfLinks] = end;
+
+			if (ropeMesh == null) ropeMesh = new Mesh();
+			else ropeMesh.Clear();
+			GenerateRopeMesh(ropeMesh, sides, linksTransforms, ropeRadius);
+			GetComponent<SkinnedMeshRenderer>().sharedMesh = ropeMesh;
+			GetComponent<SkinnedMeshRenderer>().bones = linksTransforms;
+		}
+
+		Vector3 lPos3 = linkPositions[0];
+		for (int i = 0; i < numberOfLinks; i++) {
+			Transform link = linksTransforms[i];
+			Vector3 nextlPos3 = linkPositions[i + 1];
+
+			Quaternion r = Quaternion.FromToRotation(linkForward, lPos3 - nextlPos3);
+			if (rotateEvenLinks && (i & 1) == 0) { // Rotate 90º odd/even
+				r = r * linkRotationAxisRotation;
+			}
+
+			link.localPosition = lPos3 * scale;
+			link.localRotation = r;
+
+			lPos3 = nextlPos3;
+		}
+	}
+
 	void SetLinkPositions() {
+		if (linksTransforms == null || linksTransforms.Length != numberOfLinks) {
+			while (transform.childCount > 0)
+				DestroyImmediate(transform.GetChild(0).gameObject);
+			linksTransforms = new Transform[numberOfLinks];
+			for (int i = 0; i < linksTransforms.Length; i++) {
+				linksTransforms[i] = Instantiate(linkPrefab);
+				linksTransforms[i].parent = transform;
+				linksTransforms[i].localScale = Vector3.one;
+			}
+		}
+
 		Vector3 lPos3 = linkPositions[0];
 		for (int i = 0; i < linksTransforms.Length; i++) {
 			Transform link = linksTransforms[i];
 			Vector3 nextlPos3 = linkPositions[i + 1];
 
 			Quaternion r = Quaternion.FromToRotation(linkForward, lPos3 - nextlPos3);
-			if ((i & 1) == 0) { // Rotate 90º odd/even
+			if (rotateEvenLinks && (i & 1) == 0) { // Rotate 90º odd/even
 				r = r * linkRotationAxisRotation;
 			}
 
@@ -157,16 +219,6 @@ public class FalseChainCreator : MonoBehaviour {
 	void SetLocalLinkPositions() {
 		if (linkPositions == null || linkPositions.Length != linkJoints) {
 			linkPositions = new Vector2[linkJoints];
-		}
-		if (linksTransforms == null || linksTransforms.Length != numberOfLinks) {
-			while (transform.childCount > 0)
-				DestroyImmediate(transform.GetChild(0).gameObject);
-			linksTransforms = new Transform[numberOfLinks];
-			for (int i = 0; i < linksTransforms.Length; i++) {
-				linksTransforms[i] = Instantiate(linkPrefab);
-				linksTransforms[i].parent = transform;
-				linksTransforms[i].localScale = Vector3.one;
-			}
 		}
 
 		int link = 0;
@@ -204,7 +256,65 @@ public class FalseChainCreator : MonoBehaviour {
 	}
 	
 
+	void GenerateRopeMesh(Mesh mesh, int sides, Transform[] transformBones, float radius) {
+		int length = transformBones.Length;
+		Vector3[] v = new Vector3[length * (sides + 1)];
+		Vector3[] normals = new Vector3[v.Length];
+		Vector2[] uv = new Vector2[v.Length];
+		int[] tri = new int[(length - 1) * sides * 2 * 3]; // 2 tris per side, 3 values per tri
+		BoneWeight[] b = new BoneWeight[v.Length];
+		Matrix4x4[] bindPoses = new Matrix4x4[length];
+
+		int i = 0, j = 0;
+
+		for (i = 0; i < bindPoses.Length; i++) {
+			bindPoses[i] = transform.worldToLocalMatrix;
+		}
+		i = j = 0;
+		int t = 0;
+		while (t < tri.Length) {
+			for (j = i; j < i + sides; j++) {
+				tri[t++] = j;
+				tri[t++] = j + sides + 2;
+				tri[t++] = j + 1;
+				tri[t++] = j;
+				tri[t++] = j + sides + 1;
+				tri[t++] = j + sides + 2;
+			}
+
+			i += sides + 1;
+		}
+
+		int h = 0;
+		float invSides = 1f / sides;
+		for (i = 0; i < v.Length; i += sides + 1) {
+			float r = 0;
+			for (j = i; j < i + sides; j++, r += invSides) {
+				float angle = r * 360f * Mathf.Deg2Rad;
+				normals[j] = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+				v[j] = normals[j] * radius;
+				uv[j] = new Vector2(r, h);
+				b[j].boneIndex0 = h;
+				b[j].weight0 = 1;
+			}
+			normals[j] = normals[i];
+			v[j] = v[i];
+			uv[j] = uv[i] + new Vector2(1, 0);
+			b[j].boneIndex0 = h;
+			b[j].weight0 = 1;
+			h++;
+		}
+
+		mesh.vertices = v;
+		mesh.uv = uv;
+		mesh.normals = normals;
+		mesh.triangles = tri;
+		mesh.boneWeights = b;
+		mesh.bindposes = bindPoses;
+	}
 	
+
+
 	/////////////////////////
 	// CLASS
 	/////////////////////////
