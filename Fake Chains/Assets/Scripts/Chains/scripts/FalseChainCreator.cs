@@ -36,7 +36,7 @@ public class FalseChainCreator : MonoBehaviour {
 	[Tooltip("Resolution of a Look Up Texture (LUT) needed to positionate correctly the links of the chains. The texture is shader to all the chains, that means that if a chain has a LUT with bigger resolution, lower resolutions will be ignored")]
 	public int tluResolution = 128;
 
-	[Tooltip("Preview of the LTU")]
+	[Tooltip("Preview of the LUT")]
 	Texture2D previewTextureLookUp;
 
 
@@ -86,7 +86,7 @@ public class FalseChainCreator : MonoBehaviour {
 
 			lastTarget = target;
 			qr.SetTarget(target, tluResolution, tluPrecision);
-			previewTextureLookUp = QuadRope.setTargetLookUpTexture;
+			//previewTextureLookUp = QuadRope.LUT_2_Texture();
 
 			SetLocalLinkPositions();
 
@@ -257,26 +257,54 @@ public class FalseChainCreator : MonoBehaviour {
 		float distanceYAxis;
 
 		// stores the desired distanceYAxis of SetTarget. upper right half of the full target unit range
-		public static Texture2D setTargetLookUpTexture;
+		static int lut_side;
+		static float[] lut; // look up texture
 
-		void CalculateTexture(int side, int precision) {
-			setTargetLookUpTexture = new Texture2D(side, side, TextureFormat.Alpha8, false, true);
-			setTargetLookUpTexture.filterMode = FilterMode.Bilinear;
-			setTargetLookUpTexture.wrapMode = TextureWrapMode.Clamp;
+		/// <summary>
+		/// LUT is stored as a array of floats. This function will return the array as a Texture2D to easily visualize it
+		/// </summary>
+		/// <returns>Representation of the LUT</returns>
+		public static Texture2D LUT_2_Texture() {
+			Texture2D t = new Texture2D(lut_side, lut_side, TextureFormat.Alpha8, false, true);
+			t.wrapMode = TextureWrapMode.Clamp;
+			for (int y = 0; y < lut_side; y++) {
+				for (int x = 0; x < lut_side; x++) {
+					float f = lut[x + y * lut_side];
+					t.SetPixel(x, y, new Color(f, f, f, f));
+				}
+			}
+			t.Apply();
+			return t;
+		}
+
+		void GenerateLUT(int side, int precision) {
+			lut_side = side;
+			lut = new float[side * side];
 			float invSide = 1f / side;
 			// duplicate the second row to the first row because when target.x == 0 the rectified curve gives NaN (division by 0)
 			for (int y = 0; y < side; y++) {
-				float distanceYAxis = CalculateDistanceYAxis(new Vector2(invSide, y * invSide), precision);
-				setTargetLookUpTexture.SetPixel(0, y, new Color(distanceYAxis, distanceYAxis, distanceYAxis, distanceYAxis));
+				lut[0 + y * side] = CalculateDistanceYAxis(new Vector2(invSide, y * invSide), precision);
 			}
 			for (int x = 1; x < side; x++) {
 				float x2 = x * invSide;
 				for (int y = 0; y < side; y++) {
-					float distanceYAxis = CalculateDistanceYAxis(new Vector2(x2, y * invSide), precision);
-					setTargetLookUpTexture.SetPixel(x, y, new Color(distanceYAxis, distanceYAxis, distanceYAxis, distanceYAxis));
+					lut[x + y * side] = CalculateDistanceYAxis(new Vector2(x2, y * invSide), precision);
 				}
 			}
-			setTargetLookUpTexture.Apply();
+		}
+
+		float FilteredLUT(float x, float y) {
+			x *= lut_side;
+			y *= lut_side;
+			int x0 = Mathf.FloorToInt(x);
+			int x1 = Mathf.CeilToInt(x);
+			int y0 = Mathf.FloorToInt(y) * lut_side;
+			int y1 = Mathf.CeilToInt(y) * lut_side;
+			float xx = x % 1;
+			return Mathf.LerpUnclamped(
+				Mathf.LerpUnclamped(lut[x0 + y1], lut[x1 + y1], xx),
+				Mathf.LerpUnclamped(lut[x0 + y0], lut[x1 + y0], xx),
+				y % 1);
 		}
 
 		float CalculateDistanceYAxis(Vector2 target, int precision) {
@@ -311,21 +339,25 @@ public class FalseChainCreator : MonoBehaviour {
 
 		// 5 indices
 		public void SetTarget(Vector2 targetOffset, int resolutionLookUp, int precision) {
-			if (setTargetLookUpTexture == null || setTargetLookUpTexture.width < resolutionLookUp) {
-				CalculateTexture(resolutionLookUp, precision);
+			if (lut == null || lut_side < resolutionLookUp) {
+				GenerateLUT(resolutionLookUp, precision);
 			}
 
 			target = targetOffset;
-			if (target.magnitude > 1f) {
+			float magnitude = target.magnitude;
+			if (magnitude > 1f) {
 				// The chain will be stretched
-				target = target.normalized;
+				target /= magnitude; // normalize
+				magnitude = 1;
 			}
+
+			// Aproximation that makes the rope measure always near 1
 			distanceYAxis = CalculateDistanceYAxis(target);
 		}
 
 		public float CalculateDistanceYAxis(Vector2 target) {
 			// lookup using targetOffset (x, y)
-			return setTargetLookUpTexture.GetPixelBilinear(target.x, Mathf.Abs(target.y)).a;
+			return FilteredLUT(target.x, Mathf.Abs(target.y));
 		}
 
 		// http://math.stackexchange.com/questions/389174/how-do-you-find-the-distance-between-two-points-on-a-parabola
