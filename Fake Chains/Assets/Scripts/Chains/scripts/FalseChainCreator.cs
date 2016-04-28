@@ -35,6 +35,7 @@ public class FalseChainCreator : MonoBehaviour {
 	public bool updateWhenOffscreen = false;
 	[Tooltip("Resolution of a Look Up Texture (LUT) needed to positionate correctly the links of the chains. The texture is shader to all the chains, that means that if a chain has a LUT with bigger resolution, lower resolutions will be ignored")]
 	public int tluResolution = 128;
+	public bool showGizmos = false;
 
 	[Tooltip("Preview of the LUT")]
 	Texture2D previewTextureLookUp;
@@ -111,20 +112,10 @@ public class FalseChainCreator : MonoBehaviour {
 		}
 	}
 
-	string AnimationCurveToString(AnimationCurve a) {
-		string s = "";
-		for (int i = 0; i < a.length; i++) {
-			s += "new Keyframe(" + a[i].time +
-				"f, " + a[i].value +
-				"f, " + a[i].inTangent +
-				"f, " + a[i].outTangent +
-				"f), ";
-		}
-		return s;
-	}
-
 	void OnDrawGizmosSelected() {
 		LateUpdate();
+		if (!showGizmos) return;
+
 		if (linkJoints < 2) return;
 		if (null == start || null == end) return;
 		if (null == linkPrefab) return;
