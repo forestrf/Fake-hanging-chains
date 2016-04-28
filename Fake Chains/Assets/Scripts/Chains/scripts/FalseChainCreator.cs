@@ -37,9 +37,7 @@ public class FalseChainCreator : MonoBehaviour {
 	public int tluResolution = 128;
 	public bool showGizmos = false;
 
-	[Tooltip("Preview of the LUT")]
-	Texture2D previewTextureLookUp;
-
+	// --------------------------------------------------
 
 	static GeometryUtilityUser guu = new GeometryUtilityUser();
 
