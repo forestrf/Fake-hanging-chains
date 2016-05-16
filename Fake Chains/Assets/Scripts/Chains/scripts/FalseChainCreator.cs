@@ -52,6 +52,8 @@ public class FalseChainCreator : MonoBehaviour {
 	Vector3 lastTrgRot;
 	Quaternion linkRotationAxisRotation;
 	bool wasRope = false;
+	float lastStartWidth, lastEndWidth;
+
 
 
 
@@ -65,7 +67,7 @@ public class FalseChainCreator : MonoBehaviour {
 		if (linkJoints < 2) return;
 		if (linkSize <= 0) linkSize = 0.001f;
 		if (null == start || null == end) return;
-		if (null == linkPrefab) return;
+		if (null == linkPrefab && !isRope) return;
 
 		scale = numberOfLinks * linkSize;
 
@@ -80,7 +82,7 @@ public class FalseChainCreator : MonoBehaviour {
 		transform.position = sPos;
 		Vector2 xz = new Vector2(fromToScaled.x, fromToScaled.z);
 		Vector2 target = new Vector2(xz.magnitude, fromToScaled.y) / scale;
-		if (target != lastTarget || isRope != wasRope) {
+		if (target != lastTarget || isRope != wasRope || startWidth != lastStartWidth || endWidth != lastEndWidth) {
 			if (!updateWhenOffscreen && !guu.IsVisibleByCamera(new Bounds(sPos + fromTo * 0.5f, lScale * scale))) return;
 
 			lastTarget = target;
@@ -116,8 +118,8 @@ public class FalseChainCreator : MonoBehaviour {
 
 		if (linkJoints < 2) return;
 		if (null == start || null == end) return;
-		if (null == linkPrefab) return;
-		
+		if (null == linkPrefab && !isRope) return;
+
 		Vector3 p = transform.position;
 
 		// Draw box

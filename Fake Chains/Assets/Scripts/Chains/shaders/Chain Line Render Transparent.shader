@@ -1,13 +1,15 @@
-Shader "Chain/Line Render" {
+Shader "Chain/Line Render Transparent" {
 	Properties {
 		_Color ("Color", Color) = (1,1,1,1)
 		_MainTex ("Albedo (RGB)", 2D) = "white" {}
 	}
 	SubShader {
 		Tags {
-			"Queue" = "Geometry"
-			"RenderType" = "Opaque"
+			"Queue"="Transparent"
+			"IgnoreProjector"="True"
+			"RenderType"="Transparent"
 		}
+		Blend SrcAlpha OneMinusSrcAlpha
 		LOD 200
 
 		// ---- forward rendering base pass:
@@ -75,8 +77,10 @@ Shader "Chain/Line Render" {
 				UNITY_LIGHT_ATTENUATION(atten, IN, IN.worldPos)
 
 				
-				float3 Albedo = tex2D (_MainTex, uv_MainTex).rgb;
+				float4 Albedo = tex2D (_MainTex, uv_MainTex);
 				Albedo *= _Color * IN.color;
+				
+				c.a = Albedo.a;
 
 
 				//#if (SHADER_TARGET < 30) || defined(SHADER_API_MOBILE)
