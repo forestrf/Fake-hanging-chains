@@ -86,6 +86,8 @@ public class FalseChainCreator : MonoBehaviour {
 			if (!updateWhenOffscreen && !guu.IsVisibleByCamera(new Bounds(sPos + fromTo * 0.5f, lScale * scale))) return;
 
 			lastTarget = target;
+			lastStartWidth = startWidth;
+			lastEndWidth = endWidth;
 			qr.SetTarget(target, tluResolution, tluPrecision);
 			//previewTextureLookUp = QuadRope.LUT_2_Texture();
 
