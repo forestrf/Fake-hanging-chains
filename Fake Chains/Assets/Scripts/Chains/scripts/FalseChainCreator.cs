@@ -72,7 +72,11 @@ public class FalseChainCreator : MonoBehaviour {
 		scale = numberOfLinks * linkSize;
 
 		Vector3 sPos = start.position;
-		Vector3 fromTo = end.position - sPos;
+		Vector3 ePos = end.position;
+		if (ePos.x == sPos.x) ePos.x += 0.00001f;
+		if (ePos.z == sPos.z) ePos.z += 0.00001f;
+
+		Vector3 fromTo = ePos - sPos;
 		Vector3 fromToScaled = fromTo;
 		Vector3 lScale = transform.lossyScale;
 		fromToScaled.x /= lScale.x;
@@ -289,14 +293,14 @@ public class FalseChainCreator : MonoBehaviour {
 		float FilteredLUT(float x, float y) {
 			x *= lut_side;
 			y *= lut_side;
-			int x0 = Mathf.FloorToInt(x);
-			int x1 = Mathf.CeilToInt(x);
-			int y0 = Mathf.FloorToInt(y) * lut_side;
-			int y1 = Mathf.CeilToInt(y) * lut_side;
+			int x0 = Mathf.Clamp(Mathf.FloorToInt(x), 0, lut_side - 1);
+			int x1 = Mathf.Clamp(Mathf.CeilToInt(x), 0, lut_side - 1);
+			int y0 = Mathf.Clamp(Mathf.FloorToInt(y), 0, lut_side - 1) * lut_side;
+			int y1 = Mathf.Clamp(Mathf.CeilToInt(y), 0, lut_side - 1) * lut_side;
 			float xx = x % 1;
 			return Mathf.LerpUnclamped(
-				Mathf.LerpUnclamped(lut[x0 + y1], lut[x1 + y1], xx),
 				Mathf.LerpUnclamped(lut[x0 + y0], lut[x1 + y0], xx),
+				Mathf.LerpUnclamped(lut[x0 + y1], lut[x1 + y1], xx),
 				y % 1);
 		}
 
@@ -342,10 +346,12 @@ public class FalseChainCreator : MonoBehaviour {
 				// The chain will be stretched
 				target /= magnitude; // normalize
 				magnitude = 1;
+				distanceYAxis = 0.00001f;
+			} else {
+				// Aproximation that makes the rope measure always near 1
+				distanceYAxis = CalculateDistanceYAxis(target);
 			}
-
-			// Aproximation that makes the rope measure always near 1
-			distanceYAxis = CalculateDistanceYAxis(target);
+			Debug.Log(distanceYAxis);
 		}
 
 		public float CalculateDistanceYAxis(Vector2 target) {
@@ -382,6 +388,7 @@ public class FalseChainCreator : MonoBehaviour {
 			return Integrate(target.x, target, distanceYAxis) - Integrate(0, target, distanceYAxis);
 		}
 
+		// target.x == 0 gives error
 		float Integrate(float x, Vector2 target, float distanceYAxis) {
 			float g = target.x;
 			float h = -distanceYAxis;
@@ -395,7 +402,9 @@ public class FalseChainCreator : MonoBehaviour {
 			float hx8_gjAdd4h = hx * 8 - g * jAdd4h;
 			float h16 = 16 * h;
 
-			return (Mathf.Log(sqrt1 + hx8_gjAdd4h) * g2 + sqrt1 * hx8_gjAdd4h / g2) / h16;
+			float log = sqrt1 + hx8_gjAdd4h < 0.00000001f ? 0 : Mathf.Log(sqrt1 + hx8_gjAdd4h) * g2;
+
+			return (log + sqrt1 * hx8_gjAdd4h / g2) / h16;
 		}
 
 		public Vector2 At(float i01) {
