@@ -351,7 +351,6 @@ public class FalseChainCreator : MonoBehaviour {
 				// Aproximation that makes the rope measure always near 1
 				distanceYAxis = CalculateDistanceYAxis(target);
 			}
-			Debug.Log(distanceYAxis);
 		}
 
 		public float CalculateDistanceYAxis(Vector2 target) {
