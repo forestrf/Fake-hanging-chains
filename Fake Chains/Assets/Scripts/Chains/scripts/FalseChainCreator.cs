@@ -29,6 +29,8 @@ public class FalseChainCreator : MonoBehaviour {
 	public float linkSize = 1;
 
 	[Header("Other settings")]
+	[Tooltip("If the length of the chain is not large enough it will be stretched")]
+	public bool allowStretching = false;
 	[Tooltip("Bigger values will be slower")]
 	public int quality = 30; // Number of samples to capture the curve deformation. More = slower
 	[Tooltip("Always update the position and rotation of the chain links. If true, visibility checks will be skipped, saving some computation")]
@@ -92,7 +94,7 @@ public class FalseChainCreator : MonoBehaviour {
 			lastTarget = target;
 			lastStartWidth = startWidth;
 			lastEndWidth = endWidth;
-			qr.SetTarget(target, tluResolution, tluPrecision);
+			qr.SetTarget(target, tluResolution, tluPrecision, allowStretching);
 			//previewTextureLookUp = QuadRope.LUT_2_Texture();
 
 			SetLocalLinkPositions();
@@ -217,7 +219,7 @@ public class FalseChainCreator : MonoBehaviour {
 
 		float xOffset = 1f / (quality - 1);
 		float linkDistance = 1f / numberOfLinks * ropeLength; // ropeLength [0..1]
-		float distanciaRecorrida = 0;
+		float checkedDistance = 0;
 		float x = 0;
 
 		// Positionate last = target (approx)
@@ -225,18 +227,18 @@ public class FalseChainCreator : MonoBehaviour {
 			float xNew = x + xOffset;
 			Vector2 vNew = qr.At(xNew);
 			float distanciaSegmento = Vector2.Distance(vNew, v);
-			if (distanciaRecorrida + distanciaSegmento < linkDistance) {
+			if (checkedDistance + distanciaSegmento < linkDistance) {
 				x = xNew;
 				v = vNew;
-				distanciaRecorrida += distanciaSegmento;
+				checkedDistance += distanciaSegmento;
 			} else {
-				float lerp = (linkDistance - distanciaRecorrida) / distanciaSegmento;
+				float lerp = (linkDistance - checkedDistance) / distanciaSegmento;
 
 				x = x + (xNew - x) * lerp; // Mathf.Lerp(x, xNew, lerp)
 				v.x = v.x + (vNew.x - v.x) * lerp; // Mathf.Lerp(v, vNew, lerp)
 				v.y = v.y + (vNew.y - v.y) * lerp; // Mathf.Lerp(v, vNew, lerp)
 				linkPositions[link++] = v;
-				distanciaRecorrida = 0;
+				checkedDistance = 0;
 			}
 		}
 
@@ -335,7 +337,7 @@ public class FalseChainCreator : MonoBehaviour {
 		*/
 
 		// 5 indices
-		public void SetTarget(Vector2 targetOffset, int resolutionLookUp, int precision) {
+		public void SetTarget(Vector2 targetOffset, int resolutionLookUp, int precision, bool allowStretching) {
 			if (lut == null || lut_side < resolutionLookUp) {
 				GenerateLUT(resolutionLookUp, precision);
 			}
@@ -344,8 +346,10 @@ public class FalseChainCreator : MonoBehaviour {
 			float magnitude = target.magnitude;
 			if (magnitude > 1f) {
 				// The chain will be stretched
-				target /= magnitude; // normalize
-				magnitude = 1;
+				if (!allowStretching) {
+					target /= magnitude; // normalize
+					magnitude = 1;
+				}
 				distanceYAxis = 0.00001f;
 			} else {
 				// Aproximation that makes the rope measure always near 1
@@ -387,7 +391,7 @@ public class FalseChainCreator : MonoBehaviour {
 			return Integrate(target.x, target, distanceYAxis) - Integrate(0, target, distanceYAxis);
 		}
 
-		// target.x == 0 gives error
+		// target.x == 0 is not valid
 		float Integrate(float x, Vector2 target, float distanceYAxis) {
 			float g = target.x;
 			float h = -distanceYAxis;
